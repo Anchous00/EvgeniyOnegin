@@ -1,3 +1,4 @@
+//#include "TXLib.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,36 +6,73 @@
 
 void mem_swap( void *x_address, void *y_address, size_t element_size );
 void quick_sort( void *arr, size_t len, size_t element_size,  int (*Comparator)( const void *a, const void *b ));
-int sort( void *arr, size_t len, size_t element_size, int (*Comparator)( const void *a, const void *b ));
-void printarrstr( void *arr, int len );
+size_t sort( void *arr, size_t len, size_t element_size, int (*Comparator)( const void *a, const void *b ));
+void printarrstr( void *arr, size_t len );
 int my_strcmp_up( const void *str1_p, const void *str2_p );
 int my_strcmp_down( const void *str1_p, const void *str2_p );
-char* my_fgets( char *str, int n, FILE *stream );
+char* my_fgets( char *str, size_t n, FILE *stream );
 size_t my_strlen( const char *str );
 
-const int LEN = 10000;
-const int MAX_STRLEN = 100;
+const size_t FILE_SIZE = 300000;
 
 int main( void )
 {
     FILE *file = fopen("onegin_j.txt_Ascii.txt", "r");
-    freopen("text.txt", "w", stdout);
-    char *arr[LEN] = {};
-
-    for (int i = 0; i < LEN; i++)
+    //FILE *file = fopen("test.txt", "r");
+    if (file == NULL)
     {
-        arr[i] = (char*)malloc(MAX_STRLEN * sizeof(char*));
-        my_fgets(arr[i], MAX_STRLEN, file);
+        printf("ERROR: cant open file");
+        return 1;
+    }
+    char text[FILE_SIZE] = {};
+    size_t symbcnt = fread(text, 1, sizeof(text) - 1, file);
+    text[symbcnt - 1] = '\0';
+    printf("sizeof text %zd, symbcnt %zd", sizeof(text), symbcnt);
+    fclose(file);
+
+    if (!freopen("text.txt", "w", stdout))
+    {
+        printf("ERROR: cant open file");
+        return 1;
     }
 
-    printarrstr(arr,  LEN);
-    quick_sort(arr, LEN, sizeof(arr[0]), (int(*)( const void*, const void* ))my_strcmp_up);
-    printarrstr(arr, LEN);
-
-    for (int i = 0; i < LEN; i++)
+    //printf("reopened file\n");
+    //putchar('a');
+    size_t len = 1;
+    for (size_t i = 0; i < symbcnt; i++)
     {
-        free(arr[i]);
+        if (text[i] == '\n') len++;
+        if (text[i] == '\0') break;
     }
+    printf("len: %zd\n", len);
+
+    char **arr = (char**)calloc(len, sizeof(char*));
+    char **arrreserv = (char**)calloc(len, sizeof(char*));
+
+    arr[0] = &text[0];
+    arrreserv[0] = &text[0];
+    for (size_t i = 0, j = 0; i < symbcnt; i++)
+    {
+        if (text[i] == '\n' && j < len - 1)
+        {
+            j++;
+            text[i] = '\0';
+            //printf("<%s>", &text[i]);
+            arr[j] = &text[i + 1];
+            arrreserv[j] = &text[i + 1];
+        }
+    }
+
+    quick_sort(arr, len, sizeof(arr[0]), my_strcmp_down);
+    printarrstr(arr, len);
+    qsort(arr, len, sizeof(arr[0]), my_strcmp_down);
+    printf("len %d arr[0] %s\n", len, *arr);
+    printarrstr(arr, len);
+    printarrstr(arrreserv,  len);
+    //fclose(stdout);
+
+    free(arr);
+    free(arrreserv);
 
     return 0;
 }
@@ -43,7 +81,7 @@ void quick_sort( void *arr, size_t len, size_t element_size, int (*Comparator)( 
 {
     if (len <= 1)
         return;
-    int x = sort(arr, len, element_size, Comparator);
+    size_t x = sort(arr, len, element_size, Comparator);
 
     quick_sort(arr, x, element_size, Comparator);
     quick_sort((char*)arr + (x + 1) * element_size, len - x - 1, element_size, Comparator);
@@ -51,21 +89,21 @@ void quick_sort( void *arr, size_t len, size_t element_size, int (*Comparator)( 
     return;
 }
 
-int sort( void *arr, size_t len, size_t element_size, int (*Comparator)( const void *a, const void *b ))
+size_t sort( void *arr, size_t len, size_t element_size, int (*Comparator)( const void *a, const void *b ))
 {
     //printarrint(arr, len);
-    //int x = (int)(*((char*)arr + element_size * (len - 1)));
+    //size_t x = (size_t)(*((char*)arr + element_size * (len - 1)));
     //printf("first  : %d last : %d x : %d\n", first, last, x);
-    int i = - 1;
-    for (int j = 0; j < len - 1; j++)
+    size_t i = - 1;
+    for (size_t j = 0; j < len - 1; j++)
     {
-        //if (x > (int)(*((char*)arr + j * element_size)))
+        //if (x > (size_t)(*((char*)arr + j * element_size)))
         if (Comparator((char*)arr + element_size * (len - 1), (char*)arr + j * element_size) > 0)
         {
             //printf(" %lg > %lg\n",  (double)(*((char*)arr + (len - 1) * element_size)), (double)(*((char*)arr + j * element_size)));
             i = i + 1;
             mem_swap((char*)arr + i * element_size, (char*)arr + j * element_size, element_size);
-            //printarrdouble(arr, LEN);
+            //printarrdouble(arr, len);
         }
     }
 
@@ -76,10 +114,10 @@ int sort( void *arr, size_t len, size_t element_size, int (*Comparator)( const v
     return i + 1;
 }
 
-void printarrstr( void *arr, int len )
+void printarrstr( void *arr, size_t len )
 {
-    for (int i = 0; i < len; i++)
-        printf("%s", *((char**)arr + i));
+    for (size_t i = 0; i < len; i++)
+        printf("%s\n", *((char**)arr + i));
     printf("\n");
 
     return;
@@ -88,7 +126,7 @@ void printarrstr( void *arr, int len )
 void mem_swap( void *x_address, void *y_address, size_t element_size )
 {
     char *x = (char*)x_address, *y = (char*)y_address;
-    for (int i = 0; i < element_size; i++)
+    for (size_t i = 0; i < element_size; i++)
     {
         char t = *(x + i);
         *(x + i) = *(y + i);
@@ -126,7 +164,7 @@ int my_strcmp_up( const void *str1_p, const void *str2_p )
         str2++;
     }
 
-    return 0;
+    return *str1 - *str2;
 }
 
 int my_strcmp_down( const void *str1_p, const void *str2_p )
@@ -139,8 +177,8 @@ int my_strcmp_down( const void *str1_p, const void *str2_p )
         return EOF;
     }
 
-    int i = my_strlen(str1);
-    int j = my_strlen(str2);
+    size_t i = my_strlen(str1);
+    size_t j = my_strlen(str2);
 
     while (i > 0 && j > 0)
     {
@@ -160,10 +198,10 @@ int my_strcmp_down( const void *str1_p, const void *str2_p )
         j--;
     }
 
-    return 0;
+    return *(str1 + i) - *(str2 + j);
 }
 
-char* my_fgets( char *str, int n, FILE *stream )
+char* my_fgets( char *str, size_t n, FILE *stream )
 {
     if (str == NULL)
     {
@@ -177,7 +215,7 @@ char* my_fgets( char *str, int n, FILE *stream )
         return str;
     }
 
-    for (int i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++)
     {
         str[i] = (char)fgetc(stream);
         if (str[i] == EOF)
