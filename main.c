@@ -3,69 +3,66 @@
 #include <string.h>
 #include <ctype.h>
 #include <time.h>
- #include <stdint.h>
+#include <stdint.h>
 #include <sys/stat.h>
 
+const char *FILE_NAME = "Onegin.txt";
+//const char *FILE_NAME = "test.txt";
+//const char *FILE_NAME = "WarAndPeace.txt";
+
+struct line
+{
+    char *index;
+    size_t len;
+};
+
+#define FREE(x, len) while (len-- > 0) *((char*)x + len) = '~'; free(x);
+
+size_t input_text_from_file( const char *file_name, char **buffer  );
+size_t str_amount          ( const char *text,      size_t symbcnt );
+ssize_t file_size           ( const char *filename                  );
+void   print_text_in_file  ( char** index,          size_t len     );
+
+void divide_text ( char* text, size_t symbcnt, char **index, size_t len );
+
+void quick_sort( void *arr, size_t len, size_t element_size, int (*Comparator)( const void *a, const void *b ));
+size_t sort    ( void *arr, size_t len, size_t element_size, int (*Comparator)( const void *a, const void *b ));
+
 void mem_swap( void *x_address, void *y_address, size_t element_size );
-void quick_sort( void *arr, size_t len, size_t element_size,  int (*Comparator)( const void *a, const void *b ));
-size_t sort( void *arr, size_t len, size_t element_size, int (*Comparator)( const void *a, const void *b ));
+
+int my_strcmp_up   ( const void *str1_p, const void *str2_p );
+int my_strcmp_down ( const void *str1_p, const void *str2_p );
+int my_ptrcmp_up   ( const void *x,      const void *y      );
+
 void printarrstr( void *arr, size_t len );
-int my_strcmp_up( const void *str1_p, const void *str2_p );
-int my_strcmp_down( const void *str1_p, const void *str2_p );
-int ComparePointers( const void *x, const void *y );
-size_t my_strlen( const char *str );
-size_t input_text_from_file( const char *file_name, char **buffer );
-size_t str_amount( const char* text, size_t symbcnt );
-void divide_text( char* text, char **index, size_t symbcnt, size_t len );
-size_t file_size( const char* filename );
+
 
 int main( void )
 {
-    //const char *file_name = "test.txt";
-    const char *file_name = "Onegin.txt";
-    //const char *file_name = "WarAndPeace.txt";
     char *text = NULL;
-    size_t symbcnt = input_text_from_file(file_name, &text);
+    size_t symbcnt = input_text_from_file(FILE_NAME, &text);
 
+    size_t stringcnt = str_amount(text, symbcnt);
+
+    char **index = (char**)calloc(stringcnt, sizeof(char*));
+    if (index == NULL)
+    {
+        fprintf(stderr, "cant allocate memory\n");
+        return 0;
+    }
+    divide_text(text, symbcnt, index, stringcnt);
     if (!freopen("text.txt", "w", stdout))
     {
-        printf("ERROR: cant open file");
+        fprintf(stderr, "ERROR: cant open file");
         return 1;
     }
 
-    size_t len = str_amount(text, symbcnt);
+    print_text_in_file(index, stringcnt);
+    if (fclose(stdout) == -1)
+        fprintf(stderr, "can't close output file");
 
-    char **index = (char**)calloc(len, sizeof(char*));
-
-    if (index == NULL)
-    {
-        printf("cant allocate memory\n");
-        return 0;
-    }
-
-    divide_text(text, index, symbcnt, len);
-
-    clock_t t0 = clock();
-    qsort(index, len, sizeof(index[0]), my_strcmp_down);
-    clock_t t1 = clock();
-    printarrstr(index, len);
-
-    clock_t t2 = clock();
-    quick_sort(index, len, sizeof(index[0]), my_strcmp_up);
-    clock_t t3 = clock();
-    printarrstr(index, len);
-
-    quick_sort(index, len, sizeof(index[0]), ComparePointers);
-    printarrstr(index,  len);
-    clock_t t4 = clock();
-    printf("dt1 = %lg, dt2 = %lg, t0 = %lg\n",
-          (double)(t1 - t0) / CLOCKS_PER_SEC,
-          (double)(t3 - t2) / CLOCKS_PER_SEC,
-          (double)(t4 - t0) / CLOCKS_PER_SEC);
-
-    fclose(stdout);
-    free(text);
-    free(index);
+    FREE(text, symbcnt);
+    FREE(index, stringcnt);
 
     return 0;
 }
@@ -73,41 +70,74 @@ int main( void )
 size_t input_text_from_file( const char *file_name, char **buffer )
 {
     FILE *input_file = fopen(file_name, "r");
-
     if (input_file == NULL)
     {
         printf("ERROR: cant open file");
         return 0;
     }
-    const size_t FILE_SIZE = file_size(file_name);
 
-    *buffer = (char*)calloc(FILE_SIZE + 1, sizeof(char));
+    const ssize_t FILE_SIZE = file_size(file_name);
+
+    *buffer = (char*)calloc((size_t)FILE_SIZE + 1, sizeof(char));
     if (*buffer == NULL)
         return 0;
     //printf("FILE_SIZE %ld\n", FILE_SIZE);
-    size_t symbcnt = fread(*buffer, sizeof(char), FILE_SIZE, input_file);
-    //printf("succesful read %zd sumbols\n", symbcnt);
-    //printf("<%s>, <%c>", *buffer, *buffer[symbcnt - 1]);
+    size_t symbcnt = fread(*buffer, sizeof(char), (size_t)FILE_SIZE, input_file);
     (*buffer)[symbcnt - 1] = '\0';
-    //printf("symbcnt %zd", symbcnt);
-    fclose(input_file);
+
+    if (fclose(input_file) == -1)
+        fprintf(stderr, "can't close input file\n");
 
     return symbcnt;
 }
 
 size_t str_amount( const char* text, size_t symbcnt )
 {
-    size_t len = 1;
+    size_t stringcnt = 1;
     for (size_t i = 0; i < symbcnt; i++)
     {
-        if (text[i] == '\n') len++;
+        if (text[i] == '\n') stringcnt++;
         if (text[i] == '\0') break;
     }
 
-    return len;
+    return stringcnt;
 }
 
-void divide_text( char* text, char **index, size_t symbcnt, size_t len )
+ssize_t file_size( const char* filename )
+{
+    struct stat input_file_stat = {};
+
+    if (stat(filename, &input_file_stat) == -1)
+        return -1;
+
+    return input_file_stat.st_size;
+}
+
+void print_text_in_file( char** index, size_t len )
+{
+    clock_t t0 = clock();
+    qsort(index, len, sizeof(*index), my_strcmp_down);
+    clock_t t1 = clock();
+    printarrstr(index, len); // snake_case: print_arr_str; lower camelCase: printArrStr; Upper CamelCase: PrintArrStr
+
+    clock_t t2 = clock();
+    quick_sort(index, len, sizeof(*index), my_strcmp_up);
+    clock_t t3 = clock();
+    printarrstr(index, len);
+
+    quick_sort(index, len, sizeof(*index), my_ptrcmp_up);
+    printarrstr(index,  len);
+    clock_t t4 = clock();
+
+#ifdef TIME
+    fprintf(stderr, "dt1 = %lg, dt2 = %lg, t0 = %lg\n",
+          (double)(t1 - t0) / CLOCKS_PER_SEC,
+          (double)(t3 - t2) / CLOCKS_PER_SEC,
+          (double)(t4 - t0) / CLOCKS_PER_SEC);
+#endif
+}
+
+void divide_text( char* text, size_t symbcnt, char **index, size_t len )
 {
     index[0] = &text[0];
 
@@ -120,16 +150,6 @@ void divide_text( char* text, char **index, size_t symbcnt, size_t len )
             index[j] = &text[i + 1];
         }
     }
-}
-
-size_t file_size( const char* filename )
-{
-    struct stat input_file_stat = {};
-
-    if (stat(filename, &input_file_stat) == -1)
-        return 0;
-
-    return (size_t)input_file_stat.st_size;
 }
 
 void quick_sort( void *arr, size_t len, size_t element_size, int (*Comparator)( const void *a, const void *b ))
@@ -172,21 +192,11 @@ size_t sort( void *arr, size_t len, size_t element_size, int (*Comparator)( cons
     return i + 1;
 }
 
-void printarrstr( void *arr, size_t len )
-{
-    for (size_t i = 0; i < len; i++)
-        printf("%s\n", *((char**)arr + i));
-    printf("\n");
-
-    return;
-}
-
 void mem_swap(void *x_address, void *y_address, size_t element_size)
 {
     char *x = (char *)x_address;
     char *y = (char *)y_address;
 
-    /* 8-байтовые блоки */
     while (element_size >= 8)
     {
         int64_t t;
@@ -199,8 +209,7 @@ void mem_swap(void *x_address, void *y_address, size_t element_size)
         element_size -= 8;
     }
 
-    /* 4-байтовые блоки */
-    while (element_size >= 8)
+    while (element_size >= 4)
     {
         int32_t t;
         memcpy(&t, x, sizeof t);
@@ -212,8 +221,7 @@ void mem_swap(void *x_address, void *y_address, size_t element_size)
         element_size -= 4;
     }
 
-    /* 2-байтовые блоки */
-    while (element_size >= 8)
+    while (element_size >= 2)
     {
         int16_t t;
         memcpy(&t, x, sizeof t);
@@ -225,7 +233,6 @@ void mem_swap(void *x_address, void *y_address, size_t element_size)
         element_size -= 2;
     }
 
-    /* Остаток — 1 байт */
     if (element_size)
     {
         char t = *x;
@@ -276,12 +283,11 @@ int my_strcmp_down( const void *str1_p, const void *str2_p )
         return EOF;
     }
 
-    size_t i = my_strlen(str1);
-    size_t j = my_strlen(str2);
+    size_t i = strlen(str1);
+    size_t j = strlen(str2);
 
     while (i > 0 && j > 0)
     {
-        //printf("debug\n");
         while (!isalpha(*(str1 + i)) && i > 0)
         {
             i--;
@@ -301,24 +307,17 @@ int my_strcmp_down( const void *str1_p, const void *str2_p )
     return *(str1 + i) - *(str2 + j);
 }
 
-int ComparePointers( const void *x, const void *y )
+int my_ptrcmp_up( const void *x, const void *y )
 {
     long long val = *((const intptr_t*)x) - *((const intptr_t*)y);
     return val > 0 ? 1 : val == 0 ? 0 : -1;
 }
 
-size_t my_strlen( const char *str )
+void printarrstr( void *arr, size_t len )
 {
-    if (str == NULL)
-    {
-        puts("ERROR: invalid string in function my_strlen");
-        return 0;
-    }
+    for (size_t i = 0; i < len; i++)
+        printf("%s\n", *((char**)arr + i));
+    printf("\n");
 
-    size_t len = 0;
-
-    while (str[len] != '\0')
-        len++;
-
-    return len;
+    return;
 }
